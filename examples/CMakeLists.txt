@@ -119,6 +119,7 @@ set(EXAMPLES
 	gltfscenerendering
 	gltfskinning
 	graphicspipelinelibrary
+	hbao
 	hdr
 	hostimagecopy
 	imgui
