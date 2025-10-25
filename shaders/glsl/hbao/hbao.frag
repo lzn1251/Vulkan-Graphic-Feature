@@ -6,27 +6,18 @@ layout (binding = 1) uniform sampler2D samplerNormal;
 layout (constant_id = 0) const int HBAO_DIRECTION_NUMS = 8;
 layout (constant_id = 1) const int HBAO_STEP_NUMS = 6;
 
-// layout (binding = 3) uniform UBOHBAOKernel
-// {
-// 	vec4 samples[HBAO_KERNEL_SIZE];
-// } uboHBAOKernel;
-
 layout (binding = 2) uniform UBOHBAOSettings
 {
-	float maxDistance;
 	float radius;
-	float maxRadiusPixels;
-	float angleBias;
 	float intensity;
-	float distanceFalloff;
-	float extendParamA;
-	float extendParamB;
+	float angleBias;
+	float pad;
 } uboHBAOSettings;
 
-// layout (binding = 3) uniform UBO 
-// {
-// 	mat4 projection;
-// } ubo;
+layout (binding = 3) uniform UBO 
+{
+	mat4 projection;
+} ubo;
 
 layout (location = 0) in vec2 inUV;
 
@@ -45,56 +36,74 @@ vec2 rand2(vec2 p) {
 }
 
 float falloff(float distanceSqr) {
-	return clamp(distanceSqr / max(uboHBAOSettings.radius * uboHBAOSettings.radius, 0.0001), 0.0, 1.0);
+	return 1.0 - clamp(distanceSqr / max(uboHBAOSettings.radius * uboHBAOSettings.radius, 0.0001), 0.0, 1.0);
 }
 
-float GTAO(vec3 fragPos, vec3 stepPos, vec3 normal) {
-    vec3 h = stepPos - fragPos;  // horizontal vector
-	float VoV = max(dot(h, h), 0.0001);
-	float NoV = dot(normal, h) * inversesqrt(VoV);
-	return clamp(NoV - uboHBAOSettings.angleBias, 0.0, 1.0) * falloff(VoV);
+vec2 projectToScreen(vec3 viewPos) {
+	vec4 clipPos = ubo.projection * vec4(viewPos, 1.0);
+	return (clipPos.xy / clipPos.w) * 0.5 + 0.5;
+}
+
+float computeHorizonAngle(vec3 origin, vec2 direction, float radius) {
+	float stepSize = radius / HBAO_STEP_NUMS;
+	float horizonAngle = -PI / 2.0;
+
+	for (int i = 1; i <= HBAO_STEP_NUMS; i++) {
+		float stepLength = stepSize * float(i);
+		vec3 samplePos = origin + vec3(direction * stepLength, 0.0);
+		vec2 sampleUV = projectToScreen(samplePos);
+
+        if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0) {
+			continue;
+		}
+
+		vec3 sampleViewPos = texture(samplerPositionDepth, sampleUV).rgb;
+		float sampleDepth = -sampleViewPos.z;
+
+		float originDepth = -origin.z;
+
+		float heightDiff = sampleDepth - originDepth;
+		if (heightDiff > uboHBAOSettings.angleBias) {
+			float angle = atan(heightDiff, stepLength);
+			horizonAngle = max(horizonAngle, angle);
+		}
+	}
+	return horizonAngle;
 }
 
 void main() 
 {
 	// Get G-Buffer values
-	vec3 fragPos = texture(samplerPositionDepth, inUV).rgb;
-    if (-fragPos.z >= uboHBAOSettings.maxDistance) {
+	vec3 viewPos = texture(samplerPositionDepth, inUV).rgb;
+    if (-viewPos.z <= 0.0) {
 		outFragColor = 1.0;
 		return;
 	}
 	vec3 normal = normalize(texture(samplerNormal, inUV).rgb * 2.0 - 1.0);
 
-	ivec2 screenSize = textureSize(samplerPositionDepth, 0); 
+	ivec2 screenSize = textureSize(samplerPositionDepth, 0);
+	vec2 inScreenSize = vec2(1.0 / float(screenSize.x), 1.0 / float(screenSize.y));
 	
+    // compute TBN
+	vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+	vec3 tangent = normalize(cross(up, normal));
+	vec3 bitangent = cross(normal, tangent);
+
 	// Calculate occlusion value
 	vec2 rand = rand2(inUV);
     float angleDelta = 2.0 * PI / float(HBAO_DIRECTION_NUMS);
-    float stepSize = min(-uboHBAOSettings.radius / fragPos.z, uboHBAOSettings.maxRadiusPixels) / float(HBAO_STEP_NUMS + 1.0);
-
 	float occlusion = 0.0f;
-
-	float result = stepSize;
 
 	for (int i = 0; i < HBAO_DIRECTION_NUMS; i++) {
 	   float angle = angleDelta * (float(i) + rand.x);
 	   vec2 dir = vec2(cos(angle), sin(angle));
 
-       float rayPixels = rand.y * stepSize + 1.0;
+       vec2 worldDir = dir.x * tangent.xy + dir.y * bitangent.xy;
 
-	   for (int j = 0; j < HBAO_STEP_NUMS; j++) {
-	      vec2 stepUV = round(rayPixels * dir) * screenSize + inUV;
-		  vec3 stepPos = texture(samplerPositionDepth, stepUV).rgb;
-
-		  occlusion += GTAO(fragPos, stepPos, normal);
-		  rayPixels += stepSize;
-	   }
+	   float horizonAngle = computeHorizonAngle(viewPos, worldDir, uboHBAOSettings.radius);
+	   occlusion += clamp(1.0 - sin(horizonAngle), 0.0, 1.0);
 	}
-	occlusion *= uboHBAOSettings.intensity / float(HBAO_DIRECTION_NUMS * HBAO_STEP_NUMS);
-
-	float disFactor = clamp((fragPos.z - (uboHBAOSettings.maxDistance - uboHBAOSettings.distanceFalloff)) / uboHBAOSettings.distanceFalloff, 0.0, 1.0);
-
-    float ao = mix(clamp(1.0 - occlusion, 0.0, 1.0), 1.0, disFactor);
+	float ao = 1.0 - (occlusion * uboHBAOSettings.intensity / float(HBAO_DIRECTION_NUMS));
 
 	outFragColor = ao;
 }

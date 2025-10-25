@@ -46,14 +46,10 @@ class VulkanExample : public VulkanExampleBase
   } uboHBAOParams;
 
   struct UBOHBAOSettings {
-    float maxDistance = 50.0f;
-    float radius = 7.0f;
-    float maxRadiusPixels = 5.0f;
-    float angleBias = 0.6f;
-    float intensity = 1.0f;
-    float distanceFalloff = 3.0f;
-    float extendParamA = 0.0f;
-    float extendParamB = 0.0f;
+    float radius = 0.8f;
+    float intensity = 0.4f;
+    float angleBias = 0.3f;
+    float pad = 0.0f;
   } uboHBAOSettings;
 
   struct {
@@ -505,7 +501,7 @@ class VulkanExample : public VulkanExampleBase
     {
       // Pool
       std::vector<VkDescriptorPoolSize> poolSizes = {
-          vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, maxConcurrentFrames * 3),
+          vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, maxConcurrentFrames * 4),
           vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxConcurrentFrames * 9)
       };
       VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, maxConcurrentFrames * 4);
@@ -529,6 +525,7 @@ class VulkanExample : public VulkanExampleBase
           vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
           vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
           vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
+          vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
       };
       setLayoutCreateInfo = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings.data(), static_cast<uint32_t>(setLayoutBindings.size()));
       VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &setLayoutCreateInfo, nullptr, &descriptorSetLayouts.hbao));
@@ -575,9 +572,10 @@ class VulkanExample : public VulkanExampleBase
         descriptorAllocInfo.pSetLayouts = &descriptorSetLayouts.hbao;
         VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &descriptorAllocInfo, &descriptorSets[i].hbao));
         writeDescriptorSets = {
-            vks::initializers::writeDescriptorSet(descriptorSets[i].hbao, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &positionImgDescriptor),
-            vks::initializers::writeDescriptorSet(descriptorSets[i].hbao, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &normalImgDescriptor),
-            vks::initializers::writeDescriptorSet(descriptorSets[i].hbao, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2, &uniformBuffers[i].hbaoSettings.descriptor),
+          vks::initializers::writeDescriptorSet(descriptorSets[i].hbao, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &positionImgDescriptor),
+          vks::initializers::writeDescriptorSet(descriptorSets[i].hbao, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &normalImgDescriptor),
+          vks::initializers::writeDescriptorSet(descriptorSets[i].hbao, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2, &uniformBuffers[i].hbaoSettings.descriptor),
+          vks::initializers::writeDescriptorSet(descriptorSets[i].hbao, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3, &uniformBuffers[i].hbaoParams.descriptor),
         };
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 
@@ -899,12 +897,9 @@ class VulkanExample : public VulkanExampleBase
         overlay->checkBox("Enable HBAO", &uboHBAOParams.hbao);
         overlay->checkBox("HBAO blur", &uboHBAOParams.hbaoBlur);
         overlay->checkBox("HBAO pass only", &uboHBAOParams.hbaoOnly);
-        overlay->sliderFloat("HBAO max distance", &uboHBAOSettings.maxDistance, 10.0f, 50.0f);
         overlay->sliderFloat("HBAO radius", &uboHBAOSettings.radius, 0.01f, 20.0f);
-        overlay->sliderFloat("HBAO maxRadiusPixels", &uboHBAOSettings.maxRadiusPixels, 1.0f, 10.f);
-        overlay->sliderFloat("HBAO angle bias", &uboHBAOSettings.angleBias, 0.0f, 10.0f);
         overlay->sliderFloat("HBAO Intensity", &uboHBAOSettings.intensity, 0.0f, 2.0f);
-        overlay->sliderFloat("HBAO distance falloff", &uboHBAOSettings.distanceFalloff, 1.0f, 10.0f);
+        overlay->sliderFloat("HBAO angle bias", &uboHBAOSettings.angleBias, 0.0f, 10.0f);
       }
     }
 };
