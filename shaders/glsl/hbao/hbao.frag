@@ -35,10 +35,6 @@ vec2 rand2(vec2 p) {
     return fract(sin(vec2(dot(p,vec2(234234.1,54544.7)), sin(dot(p,vec2(33332.5,18563.3))))) *323434.34344);
 }
 
-float falloff(float distanceSqr) {
-	return 1.0 - clamp(distanceSqr / max(uboHBAOSettings.radius * uboHBAOSettings.radius, 0.0001), 0.0, 1.0);
-}
-
 vec2 projectToScreen(vec3 viewPos) {
 	vec4 clipPos = ubo.projection * vec4(viewPos, 1.0);
 	return (clipPos.xy / clipPos.w) * 0.5 + 0.5;
@@ -80,9 +76,6 @@ void main()
 		return;
 	}
 	vec3 normal = normalize(texture(samplerNormal, inUV).rgb * 2.0 - 1.0);
-
-	ivec2 screenSize = textureSize(samplerPositionDepth, 0);
-	vec2 inScreenSize = vec2(1.0 / float(screenSize.x), 1.0 / float(screenSize.y));
 	
     // compute TBN
 	vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
@@ -105,6 +98,6 @@ void main()
 	}
 	float ao = 1.0 - (occlusion * uboHBAOSettings.intensity / float(HBAO_DIRECTION_NUMS));
 
-	outFragColor = ao;
+	outFragColor = clamp(ao, 0.0, 1.0);
 }
 

@@ -659,7 +659,7 @@ class VulkanExample : public VulkanExampleBase
       // HBAO generation pipeline
       pipelineCreateInfo.renderPass = frameBuffers.hbao.renderPass;
       pipelineCreateInfo.layout = pipelineLayouts.hbao;
-      // HBAO Kernel size and radius are constant for this pipeline, so we set
+      // HBAO direction nums and step nums are constant for this pipeline, so we set
       // them using specialization constants
       struct SpecializationData {
         uint32_t directionNums = HBAO_DIRECTION_NUMS;
